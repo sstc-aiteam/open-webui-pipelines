@@ -1,3 +1,18 @@
+
+
+## [**PandasAI CSV Query Pipeline**](/pipelines/pandas_ai_csv_pipeline.py)
+Ask questions about your CSV files in natural language. This pipeline loads all CSVs from a directory and uses PandasAI with an OpenAI model to answer your queries.
+
+### Build docker images
+`./build_docker.sh`
+
+### Start with docker
+`docker run -d -p 9099:9099 --add-host=host.docker.internal:host-gateway -v pipelines:/app/pipelines --name pipelines sstcaiteam/open-webui-pipelines:0.1.0`
+
+
+See below for the offical [open-webui pipelines](https://github.com/open-webui/pipelines)  
+
+----
 <p align="center">
   <a href="#"><img src="./docs/images/header.png" alt="Pipelines Logo"></a>
 </p>
