@@ -7,6 +7,10 @@ Ask questions about your CSV files in natural language. This pipeline loads all 
 `./build_docker.sh`
 
 ### Start with docker
+Pull the image  
+`docker pull sstcaiteam/open-webui-pipelines:${VERSION}`
+ 
+Start the container  
 `docker run -d -p 9099:9099 --add-host=host.docker.internal:host-gateway -v pipelines:/app/pipelines --name pipelines sstcaiteam/open-webui-pipelines:0.1.0`
 
 
