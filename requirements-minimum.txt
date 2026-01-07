@@ -14,5 +14,6 @@ aiohttp==3.9.5
 httpx
 
 # PandasAI for CSV Query Pipeline
-pandasai>=3.0.0b2
+pandasai==3.0.0
+pandasai-litellm==1.80.11
 

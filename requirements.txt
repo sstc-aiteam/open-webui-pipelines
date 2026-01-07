@@ -65,3 +65,7 @@ beautifulsoup4
 # Llama Index for RAG
 llama-index
 llama-index-llms-ollama
+
+# PandasAI for CSV Query Pipeline
+pandasai==3.0.0
+pandasai-litellm==1.80.11

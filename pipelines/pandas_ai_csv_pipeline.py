@@ -8,12 +8,13 @@ description: A pipeline for querying CSV files using PandasAI.
 requirements: pandasai, pandas, pandasai_openai
 """
 
-import pandas as pd
 import os
 import glob
 import json
 import requests
 import hashlib
+
+import pandas as pd
 
 from logging import getLogger
 from typing import List, Union, Generator, Iterator, Any, Callable
@@ -55,7 +56,9 @@ class Pipeline:
             description="OpenAI API key. Can be set via OPENAI_API_KEY environment variable."
         )
         OPENAI_MODEL: str = Field(
-            default="gpt-4.1", description="OpenAI model to use for PandasAI."
+             default="gpt-5.1", description="OpenAI model to use for PandasAI."
+#            default="gpt-5-mini", description="OpenAI model to use for PandasAI."
+#            default="gpt-4.1-mini", description="OpenAI model to use for PandasAI."
         )
 
     def __init__(self):
@@ -68,7 +71,7 @@ class Pipeline:
     def setup_pandasai_agent(self):
         import pandasai as pai
         from pandasai import Agent
-        from pandasai_openai import OpenAI
+        from pandasai_litellm.litellm import LiteLLM
 
         if not self.valves.OPENAI_API_KEY:
             logger.warning(
@@ -94,9 +97,13 @@ class Pipeline:
         for df, filename in zip(dataframes, csv_files):
             df.name = os.path.splitext(os.path.basename(filename))[0]
 
-        llm = OpenAI(
-            api_token=self.valves.OPENAI_API_KEY, 
-            model=self.valves.OPENAI_MODEL
+        ### llm = OpenAI(
+        ###     api_token=self.valves.OPENAI_API_KEY, 
+        ###     model=self.valves.OPENAI_MODEL
+        ### )
+        llm = LiteLLM(
+            model=self.valves.OPENAI_MODEL,
+            api_key=self.valves.OPENAI_API_KEY
         )
         self.pai_agent = Agent(dataframes, config={"llm": llm, "verbose": True})
         logger.info(
