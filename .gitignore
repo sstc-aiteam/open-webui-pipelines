@@ -3,9 +3,12 @@ __pycache__
 
 /litellm
 
-
 !pipelines/.gitignore
 .DS_Store
 
 .venv
 venv/
+
+pipelines/docs/*.docx
+pipelines/docs/*.json
+pandasai.log

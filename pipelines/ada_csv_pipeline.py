@@ -1,0 +1,367 @@
+"""
+title: OpenAI Advanced Data Analysis CSV Query
+author: open-webui
+date: 2024-05-31
+version: 1.0
+license: MIT
+description: A pipeline for querying CSV files using OpenAI Advanced Data Analysis.
+requirements: openai, python-docx, pandas
+"""
+
+import os
+import glob
+import json
+import requests
+import hashlib
+import asyncio
+import io
+import pandas as pd
+
+from logging import getLogger
+from typing import List, Union, Generator, Iterator, Any, Callable
+
+from pydantic import BaseModel, Field
+from openai import AsyncOpenAI
+from docx import Document
+
+from utils.pipelines.main import pop_system_message
+
+logger = getLogger(__name__)
+
+
+class Pipeline:
+    """
+    A pipeline for querying CSV files using OpenAI Advanced Data Analysis.
+    This pipeline loads all CSV files from a specified directory and uses the OpenAI Assistants API
+    to answer questions about the data in those files.
+    """
+
+    class Valves(BaseModel):
+        """
+        Configuration valves for the pipeline.
+        These can be overridden by setting environment variables.
+        """
+
+        CSV_DIR: str = Field(
+            default="csv",
+            description="Directory containing CSV files, relative to the 'pipelines' directory.",
+        )
+        DOC_DIR: str = Field(
+            default="docs",
+            description="Directory containing DOCX files, relative to the 'pipelines' directory.",
+        )
+        OPEN_WebUI_Host: str = Field(
+            default="http://localhost:3000", 
+            description="Open WebUI host URL. (use docker internal host when you host OpenWebui within docker)"
+        )
+        OPEN_WebUI_API_KEY: str = Field(
+            default="", 
+            description="Open WebUI API key for the file API api/v1/files/{id}/content access."
+        )
+        OPENAI_API_KEY: str = Field(
+            default="", 
+            description="OpenAI API key. Can be set via OPENAI_API_KEY environment variable."
+        )
+        OPENAI_MODEL: str = Field(
+             default="gpt-5.1", description="OpenAI model to use for Code Interpreter."
+        )
+        SYSTEM_PROMPT_KEYWORD: str = Field(
+            default="""
+你是一位專精於智慧運輸系統（Intelligent Transportation Systems, ITS）領域的專業分析師，擅長從政策報告、技術文件與研究資料中抽取能支撐分類工作的關鍵資訊。
+你的任務是：
+針對使用者提供的 ITS 文件內容或知識庫文本，輸出可用於文件自動分類與檢索索引建立的結構化分析結果。
+
+【語言與風格規範】
+
+語言： 必須使用繁體中文，禁止出現簡體字或大陸用語。
+
+風格： 採正式、嚴謹、邏輯清晰的分析報告口吻。
+
+取詞準則： 關鍵詞應具備「語意指向性」與「分類可判斷性」，避免過於籠統或修辭性詞彙。
+
+⚙️ 【任務流程與輸出邏輯】
+🧠 Step 1｜模式判定與執行
+
+1️⃣ 預設模式（不摘要）
+　直接根據全文內容進行主題分類與關鍵詞擷取。
+　此模式適合文件結構完整、主題集中者。
+
+2️⃣ 摘要模式（使用者指定時採用）
+　若使用者明確指令（如「請先摘要再抽取」或「採摘要模式」），則：
+　- 先生成一份約500字 的專業摘要。
+　- 再根據摘要進行關鍵詞擷取與分類分析。
+
+💡 若未指定模式，完成初步擷取後請主動詢問：
+「是否要改採 ‘先摘要再擷取關鍵詞’ 的模式，以獲得更概括的主題關鍵詞？」
+
+🧩 Step 2｜輸出 JSON 格式結構化內容
+
+請一律輸出下列表格所示的四個主要區塊，並確保內容可支撐後續分類任務。
+
+區塊編號	區塊名稱	輸出內容要求	範例參考
+1️⃣	【主題分類】	以 2–4 組明確主題標籤表示文件核心範疇；建議使用既有 ITS 分類體系。	智慧號誌、車聯網(V2X)、MaaS、自駕車、交通管理政策、國際合作
+2️⃣	【文件屬性】	指出文件性質，用以判斷資料來源與用途。	政策報告、技術規劃、試驗案例、研究成果、標準規範
+3️⃣	【核心關鍵詞組】	抽取 5–10 個具代表性的多詞名詞組，並涵蓋「技術項目」、「政策面向」與「應用場域」三類資訊。	動態號誌控制系統、車流偵測設備、緊急車輛優先權、路側單元(RSU)、資料交換標準
+4️⃣	【搜尋輔助詞】	針對關鍵詞組補充同義詞、縮寫、英文術語或常用變體，方便跨文件檢索。	動態號誌：智慧號誌控制、Adaptive Signal Control；EVP：緊急車輛優先通行、Emergency Vehicle Priority
+
+🔍 提示： 關鍵詞組的選取應兼顧「主題層級」（政策、技術、服務）與「語意層級」（系統、設備、應用、成效），以利後續文件自動分群。
+            """,
+            description="System prompt for keyword extraction from document files."
+        )
+
+    def __init__(self):
+        self.name = "OpenAI Advanced Data Analysis CSV Pipeline"
+        self.valves = self.Valves(
+            **{k: os.getenv(k, v.default) for k, v in self.Valves.model_fields.items()}
+        )
+        self.client = None
+        self.file_ids = {}  # Map file_path to file_id
+
+    async def setup_assistant(self):
+        if not self.valves.OPENAI_API_KEY:
+            logger.warning(
+                "OpenAI API key is not set. Please set the OPENAI_API_KEY environment variable. The pipeline will not be able to answer questions."
+            )
+            return
+        
+        if not self.client:
+            self.client = AsyncOpenAI(api_key=self.valves.OPENAI_API_KEY)
+
+        # The CSV_DIR is relative to the `pipelines` directory
+        csv_dir_path = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)), self.valves.CSV_DIR
+        )
+        if not os.path.exists(csv_dir_path):
+            os.makedirs(csv_dir_path)
+            
+        csv_files = glob.glob(os.path.join(csv_dir_path, "*.csv"))
+
+        all_csv_path = os.path.join(csv_dir_path, "all.csv")
+        dfs = []
+        for file_path in csv_files:
+            if os.path.basename(file_path) == "all.csv":
+                continue
+            try:
+                dfs.append(pd.read_csv(file_path))
+            except Exception as e:
+                logger.error(f"Error reading {file_path}: {e}")
+
+        if dfs:
+            pd.concat(dfs, ignore_index=True).to_csv(all_csv_path, index=False)
+            if all_csv_path in self.file_ids:
+                del self.file_ids[all_csv_path]
+            csv_files = [all_csv_path]
+        elif os.path.exists(all_csv_path):
+            csv_files = [all_csv_path]
+
+        if not csv_files:
+            logger.warning(
+                f"No CSV files found in {csv_dir_path}. The pipeline will not be able to answer questions."
+            )
+            # We still proceed to setup assistant if needed, but without files it might be useless for data analysis
+        
+        # Upload files to OpenAI
+        current_file_ids = []
+        for file_path in csv_files:
+            if file_path not in self.file_ids:
+                try:
+                    logger.info(f"Uploading {file_path} to OpenAI...")
+                    with open(file_path, "rb") as f:
+                        file_obj = await self.client.files.create(
+                            file=f,
+                            purpose="assistants"
+                        )
+                    self.file_ids[file_path] = file_obj.id
+                    logger.info(f"Uploaded {file_path} as {file_obj.id}")
+                except Exception as e:
+                    logger.error(f"Failed to upload {file_path}: {e}")
+            
+            if file_path in self.file_ids:
+                current_file_ids.append(self.file_ids[file_path])
+
+        logger.info(f"Files ready for Responses API: {len(current_file_ids)} files.")
+
+    async def on_startup(self):
+        """
+        Initializes the OpenAI Assistant on server startup.
+        """
+        logger.debug(f"on_startup:{self.name}")
+        if self.valves.OPENAI_API_KEY:
+            self.client = AsyncOpenAI(api_key=self.valves.OPENAI_API_KEY)
+            await self.setup_assistant()
+
+    async def on_shutdown(self):
+        logger.debug(f"on_shutdown:{self.name}")
+        pass
+
+    def check_duplicate_file(self, dir_path: str, content: bytes, pattern: str = "*.csv") -> tuple[bool, str]:
+        file_hash = hashlib.sha256(content).hexdigest()
+        for existing_file in glob.glob(os.path.join(dir_path, pattern)):
+            if os.path.getsize(existing_file) == len(content):
+                with open(existing_file, "rb") as f:
+                    if hashlib.sha256(f.read()).hexdigest() == file_hash:
+                        file_name = os.path.basename(existing_file)
+                        logger.info(f"Duplicate file content found in {file_name}, skipping download.")
+                        return True, file_name
+        return False, ""
+
+    async def process_csv_file(self, file_id: str, file_name: str, url_path: str) -> bool:
+        csv_dir_path = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)), self.valves.CSV_DIR
+        )
+        if not os.path.exists(csv_dir_path):
+            os.makedirs(csv_dir_path)
+
+        try:
+            headers = {}
+            if self.valves.OPEN_WebUI_API_KEY:
+                headers["Authorization"] = f"Bearer {self.valves.OPEN_WebUI_API_KEY}"
+            url = f"{self.valves.OPEN_WebUI_Host}{url_path}/content"
+            response = requests.get(url, headers=headers)
+            response.raise_for_status()
+
+            content = response.content
+            is_duplicate, _ = self.check_duplicate_file(csv_dir_path, content, "*.csv")
+            if not is_duplicate:
+                save_name = "_".join([file_id, os.path.basename(file_name)])
+                with open(os.path.join(csv_dir_path, save_name), "wb") as f:
+                    f.write(content)
+                logger.info(f"Downloaded {url} to {os.path.join(csv_dir_path, save_name)}")
+                
+                return True
+        except Exception as e:
+            logger.error(f"Error downloading file: {e}")
+        
+        return False
+
+
+    async def process_docx_file(self, file_id: str, file_name: str, url_path: str):
+        doc_dir_path = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)), self.valves.DOC_DIR
+        )
+        if not os.path.exists(doc_dir_path):
+            os.makedirs(doc_dir_path)
+
+        try:
+            headers = {}
+            if self.valves.OPEN_WebUI_API_KEY:
+                headers["Authorization"] = f"Bearer {self.valves.OPEN_WebUI_API_KEY}"
+            url = f"{self.valves.OPEN_WebUI_Host}{url_path}/content"
+            response = requests.get(url, headers=headers)
+            response.raise_for_status()
+
+            content = response.content
+            is_duplicate, save_name = self.check_duplicate_file(doc_dir_path, content, "*.docx")
+            if not is_duplicate:
+                save_name = "_".join([file_id, os.path.basename(file_name)])
+                file_path = os.path.join(doc_dir_path, save_name)
+                with open(file_path, "wb") as f:
+                    f.write(content)
+                logger.info(f"Downloaded {url} to {file_path}")
+
+            if not self.client and self.valves.OPENAI_API_KEY:
+                self.client = AsyncOpenAI(api_key=self.valves.OPENAI_API_KEY)
+
+            if self.client:
+                doc = Document(io.BytesIO(content))
+                full_text = []
+                for para in doc.paragraphs:
+                    full_text.append(para.text)
+                text_content = "\n".join(full_text)
+
+                completion = await self.client.chat.completions.create(
+                    model=self.valves.OPENAI_MODEL,
+                    messages=[
+                        {"role": "system", "content": self.valves.SYSTEM_PROMPT_KEYWORD},
+                        {"role": "user", "content": text_content[:20000]}
+                    ],
+                    response_format={"type": "json_object"}
+                )
+                keywords_json = completion.choices[0].message.content
+                
+                json_path = os.path.join(doc_dir_path, f"{save_name}.json")
+                with open(json_path, "w") as f:
+                    f.write(keywords_json)
+                logger.info(f"Keywords saved to {json_path}")
+
+        except Exception as e:
+            logger.error(f"Error processing docx file: {e}")
+
+    async def inlet(self, body: dict, user: dict) -> dict:
+        # Get received files if no specific task is set in metadata
+        if body.get("metadata", {}).get("task") is None:
+            # logger.info(f"inlet body: {json.dumps(body, ensure_ascii=False)}")
+
+            files_added = False
+            files = body.get("files", [])
+            for file in files:
+                id = file.get("id")
+                url_path = file.get("url")
+                name = file.get("name")
+                logger.info(f"get uploaded file: {name} {id} with access URL and ID: {url_path}")
+
+                if url_path and name.endswith(".csv"):
+                    if await self.process_csv_file(id, name, url_path):
+                        files_added = True
+
+                elif url_path and name.endswith(".docx"):
+                    await self.process_docx_file(id, name, url_path)
+            
+            if files_added:
+                await self.setup_assistant()
+            
+            messages = body.get("messages", [])
+            _, nosys_messages = pop_system_message(messages)
+            if not nosys_messages:
+                return body
+            
+            rs = ""
+            try:
+                if not self.client:
+                    rs = "Assistant not initialized. Please ensure OPENAI_API_KEY is set."
+                else:
+                    # Use Responses API
+                    csv_dir_path = os.path.join(
+                        os.path.dirname(os.path.abspath(__file__)), self.valves.CSV_DIR
+                    )
+                    csv_files = glob.glob(os.path.join(csv_dir_path, "all.csv"))
+
+                    csv_file_ids = []
+                    for fp in csv_files:
+                        if fp in self.file_ids:
+                            csv_file_ids.append(self.file_ids[fp])
+                            logger.info(f"Using file IDs for analysis: {self.file_ids[fp]} from {fp}")
+                        
+                    msgs = [{"role": m["role"], "content": m["content"]} for m in nosys_messages]
+                    logger.info(f"messages: {msgs}")
+
+                    response = await self.client.responses.create(
+                        model=self.valves.OPENAI_MODEL,
+                        tools=[{
+                            "type": "code_interpreter",
+                            "container": {
+                                "type": "auto",
+                                "file_ids": csv_file_ids
+                            }
+                        }],
+                        instructions="You are a helpful assistant proficient in data analysis. You have access to CSV files. Use the code_interpreter tool to analyze the data and answer user questions.",
+                        input=msgs,
+                    )
+                    rs = response.output_text
+                        
+            except Exception as e:
+                logger.error(f"Error during OpenAI chat: {e}")
+                rs = f"Sorry, I encountered an error while processing your request: {e}"
+            
+            body["response"] = rs
+
+        return body
+
+    def pipe(
+        self, 
+        user_message: str, 
+        model_id: str, 
+        messages: List[dict], 
+        body: dict,
+    ) -> Union[str, Generator, Iterator]:
+        return body.get("response", "")
