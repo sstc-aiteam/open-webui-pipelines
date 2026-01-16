@@ -24,7 +24,7 @@ from pydantic import BaseModel, Field
 from openai import AsyncOpenAI
 from docx import Document
 
-from utils.pipelines.main import pop_system_message
+from utils.pipelines.main import pop_system_message, get_last_user_message
 
 logger = getLogger(__name__)
 
@@ -134,52 +134,75 @@ class Pipeline:
         if not os.path.exists(csv_dir_path):
             os.makedirs(csv_dir_path)
             
-        csv_files = glob.glob(os.path.join(csv_dir_path, "*.csv"))
-
+        # Combine all CSVs into one
         all_csv_path = os.path.join(csv_dir_path, "all.csv")
-        dfs = []
-        for file_path in csv_files:
-            if os.path.basename(file_path) == "all.csv":
-                continue
-            try:
-                dfs.append(pd.read_csv(file_path))
-            except Exception as e:
-                logger.error(f"Error reading {file_path}: {e}")
 
-        if dfs:
-            pd.concat(dfs, ignore_index=True).to_csv(all_csv_path, index=False)
-            if all_csv_path in self.file_ids:
-                del self.file_ids[all_csv_path]
-            csv_files = [all_csv_path]
-        elif os.path.exists(all_csv_path):
-            csv_files = [all_csv_path]
-
+        csv_files = glob.glob(os.path.join(csv_dir_path, "*.csv"))
         if not csv_files:
             logger.warning(
                 f"No CSV files found in {csv_dir_path}. The pipeline will not be able to answer questions."
             )
             # We still proceed to setup assistant if needed, but without files it might be useless for data analysis
-        
-        # Upload files to OpenAI
-        current_file_ids = []
-        for file_path in csv_files:
-            if file_path not in self.file_ids:
-                try:
-                    logger.info(f"Uploading {file_path} to OpenAI...")
-                    with open(file_path, "rb") as f:
-                        file_obj = await self.client.files.create(
-                            file=f,
-                            purpose="assistants"
-                        )
-                    self.file_ids[file_path] = file_obj.id
-                    logger.info(f"Uploaded {file_path} as {file_obj.id}")
-                except Exception as e:
-                    logger.error(f"Failed to upload {file_path}: {e}")
-            
-            if file_path in self.file_ids:
-                current_file_ids.append(self.file_ids[file_path])
 
-        logger.info(f"Files ready for Responses API: {len(current_file_ids)} files.")
+        dfs = []
+        for file_path in csv_files:
+            if os.path.basename(file_path) != "all.csv":
+                try:
+                    dfs.append(pd.read_csv(file_path))
+                except Exception as e:
+                    logger.error(f"Error reading {file_path}: {e}")
+        
+        # Enrich all.csv with keywords from docs json files
+        if dfs:
+            df = pd.concat(dfs, ignore_index=True)
+
+            # Load keywords from docx json files and fill to the corresponding cell in dataframe
+            doc_dir_path = os.path.join(
+                os.path.dirname(os.path.abspath(__file__)), self.valves.DOC_DIR
+            )
+            if os.path.exists(doc_dir_path):
+                json_files = glob.glob(os.path.join(doc_dir_path, "*.docx.json"))
+                if json_files:
+                    if "核心關鍵詞組" not in df.columns:
+                        df["核心關鍵詞組"] = ""
+                    
+                    for json_file in json_files:
+                        try:
+                            # Filename format: $GUID_$編號.docx.json
+                            filename = os.path.basename(json_file)
+                            if filename.endswith(".docx.json"):
+                                num_str = filename[:-10].split("_")[-1]
+                                if num_str.isdigit():
+                                    num = int(num_str)
+                                    if "編號" in df.columns:
+                                        row_masks = df["編號"] == num
+                                        if row_masks.any():
+                                            with open(json_file, "r", encoding="utf-8") as f:
+                                                data = json.load(f)
+                                            keywords = data.get("核心關鍵詞組")
+                                            if keywords:
+                                                df.loc[row_masks, "核心關鍵詞組"] = "、".join(keywords) if isinstance(keywords, list) else str(keywords)
+                        except Exception as e:
+                            logger.error(f"Error processing {json_file}: {e}")
+
+            df.to_csv(all_csv_path, index=False)
+
+        
+        if os.path.exists(all_csv_path):
+            # Upload all.csv to OpenAI
+            try:
+                logger.info(f"Uploading {all_csv_path} to OpenAI...")
+                with open(all_csv_path, "rb") as f:
+                    file_obj = await self.client.files.create(
+                        file=f,
+                        purpose="assistants"
+                    )
+                self.file_ids[all_csv_path] = file_obj.id
+                logger.info(f"Uploaded {all_csv_path} as {file_obj.id}")
+            except Exception as e:
+                logger.error(f"Failed to upload {all_csv_path}: {e}")
+            
+        logger.info(f"Files ready for ADA API: {all_csv_path} with {self.file_ids}")
 
     async def on_startup(self):
         """
@@ -312,7 +335,9 @@ class Pipeline:
             
             messages = body.get("messages", [])
             _, nosys_messages = pop_system_message(messages)
-            if not nosys_messages:
+            logger.info(f"messages without system part: {nosys_messages}")
+            
+            if not get_last_user_message(messages):
                 return body
             
             rs = ""
@@ -327,10 +352,11 @@ class Pipeline:
                     csv_files = glob.glob(os.path.join(csv_dir_path, "all.csv"))
 
                     csv_file_ids = []
-                    for fp in csv_files:
-                        if fp in self.file_ids:
-                            csv_file_ids.append(self.file_ids[fp])
-                            logger.info(f"Using file IDs for analysis: {self.file_ids[fp]} from {fp}")
+                    all_csv_path = os.path.join(csv_dir_path, "all.csv")
+                    fid = self.file_ids.get(all_csv_path)
+                    if fid:
+                        csv_file_ids.append(fid)
+                        logger.info(f"Using file IDs for analysis: {self.file_ids[fid]} from {all_csv_path}")
                         
                     msgs = [{"role": m["role"], "content": m["content"]} for m in nosys_messages]
                     logger.info(f"messages: {msgs}")
