@@ -197,12 +197,10 @@ class Pipeline:
                         file=f,
                         purpose="assistants"
                     )
-                self.file_ids[all_csv_path] = file_obj.id
-                logger.info(f"Uploaded {all_csv_path} as {file_obj.id}")
+                    self.file_ids[all_csv_path] = file_obj.id
+                    logger.info(f"Uploaded file {all_csv_path} as id = {file_obj.id} is ready for ADA API")
             except Exception as e:
                 logger.error(f"Failed to upload {all_csv_path}: {e}")
-            
-        logger.info(f"Files ready for ADA API: {all_csv_path} with {self.file_ids}")
 
     async def on_startup(self):
         """
