@@ -14,7 +14,7 @@ aiohttp==3.9.5
 httpx
 
 # AI libraries
-openai
+openai==2.14.0
 anthropic
 google-generativeai
 vertexai

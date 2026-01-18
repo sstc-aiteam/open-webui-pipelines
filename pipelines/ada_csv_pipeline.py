@@ -18,7 +18,7 @@ import io
 import pandas as pd
 
 from logging import getLogger
-from typing import List, Union, Generator, Iterator, Any, Callable
+from typing import List, Union, Generator, Iterator, Optional, Any, Callable
 
 from pydantic import BaseModel, Field
 from openai import AsyncOpenAI
@@ -256,7 +256,7 @@ class Pipeline:
         return False
 
 
-    async def process_docx_file(self, file_id: str, file_name: str, url_path: str):
+    async def process_docx_file(self, file_id: str, file_name: str, url_path: str) -> bool:
         doc_dir_path = os.path.join(
             os.path.dirname(os.path.abspath(__file__)), self.valves.DOC_DIR
         )
@@ -284,12 +284,18 @@ class Pipeline:
                 self.client = AsyncOpenAI(api_key=self.valves.OPENAI_API_KEY)
 
             if self.client:
+                json_path = os.path.join(doc_dir_path, f"{save_name}.json")
+                if os.path.exists(json_path):
+                    logger.info(f"Keywords JSON already exists at {json_path}, skipping generation.")
+                    return False
+
                 doc = Document(io.BytesIO(content))
                 full_text = []
                 for para in doc.paragraphs:
                     full_text.append(para.text)
                 text_content = "\n".join(full_text)
 
+                logger.info(f"Extracted keywords from DOCX {save_name} via OpenAI API ...")
                 completion = await self.client.chat.completions.create(
                     model=self.valves.OPENAI_MODEL,
                     messages=[
@@ -300,15 +306,17 @@ class Pipeline:
                 )
                 keywords_json = completion.choices[0].message.content
                 
-                json_path = os.path.join(doc_dir_path, f"{save_name}.json")
                 with open(json_path, "w") as f:
                     f.write(keywords_json)
                 logger.info(f"Keywords saved to {json_path}")
+                return True
 
         except Exception as e:
             logger.error(f"Error processing docx file: {e}")
+        
+        return False
 
-    async def inlet(self, body: dict, user: dict) -> dict:
+    async def inlet(self,  body: dict, __user__: Optional[dict] = None) -> dict:
         # Get received files if no specific task is set in metadata
         if body.get("metadata", {}).get("task") is None:
             # logger.info(f"inlet body: {json.dumps(body, ensure_ascii=False)}")
@@ -326,7 +334,8 @@ class Pipeline:
                         files_added = True
 
                 elif url_path and name.endswith(".docx"):
-                    await self.process_docx_file(id, name, url_path)
+                    if await self.process_docx_file(id, name, url_path):
+                        files_added = True
             
             if files_added:
                 await self.setup_assistant()
