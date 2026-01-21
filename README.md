@@ -13,6 +13,12 @@ Pull the image
 Start the container  
 `docker run -d -p 9099:9099 --add-host=host.docker.internal:host-gateway -v pipelines:/app/pipelines --name pipelines sstcaiteam/open-webui-pipelines:0.1.0`
 
+[Connect to Open WebUI](https://github.com/sstc-aiteam/open-webui-pipelines/tree/dev_openai_ada?tab=readme-ov-file#docker)
+
+Parameters for  OpenAI Advanced Data Analysis Pipeline  
+<img height="360" alt="image" src="https://github.com/user-attachments/assets/4275de1c-9f58-4751-b220-2aaf7822f0a2" />
+
+[Open WebUI Authentication Setup for API Key](https://docs.openwebui.com/getting-started/advanced-topics/monitoring/#authentication-setup-for-api-key-)
 
 See below for the offical [open-webui pipelines](https://github.com/open-webui/pipelines)  
 
