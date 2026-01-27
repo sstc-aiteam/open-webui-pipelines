@@ -3,6 +3,10 @@
 Ask questions about your CSV files in natural language. This pipeline loads all CSVs from a directory and uses OpenAI LLM with Advanced Data Analysis tool (Code Interpreter) to answer your queries.
 
 ### Overview
+#### User query with uploaded CSV tables 
+<img width="544" height="374" alt="ada_pipelines_query" src="https://github.com/user-attachments/assets/8d334c1c-d234-4ed4-8bbd-4351ae45b69c" />
+
+#### Extend analysis data source by uploading .csv or .docx files
 <img width="570" height="368" alt="ada_pipelines_ks" src="https://github.com/user-attachments/assets/d5919da9-1095-4429-916b-dedaeb6aadd7" />
 
 
