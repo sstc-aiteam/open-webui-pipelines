@@ -1,6 +1,6 @@
 
 ## [**PandasAI CSV Query Pipeline**](/pipelines/pandas_ai_csv_pipeline.py)
-Ask questions about your CSV files in natural language. This pipeline loads all CSVs from a directory and uses PandasAI with an OpenAI model to answer your queries.
+Ask questions about your CSV files in natural language. This pipeline loads all CSVs from a directory and uses OpenAI LLM with Advanced Data Analysis tool (Code Interpreter) to answer your queries.
 
 ### Overview
 <img width="570" height="368" alt="ada_pipelines_ks" src="https://github.com/user-attachments/assets/d5919da9-1095-4429-916b-dedaeb6aadd7" />
