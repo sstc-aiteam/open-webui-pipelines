@@ -1,7 +1,10 @@
 
-
 ## [**PandasAI CSV Query Pipeline**](/pipelines/pandas_ai_csv_pipeline.py)
 Ask questions about your CSV files in natural language. This pipeline loads all CSVs from a directory and uses PandasAI with an OpenAI model to answer your queries.
+
+### Overview
+<img width="570" height="368" alt="ada_pipelines_ks" src="https://github.com/user-attachments/assets/d5919da9-1095-4429-916b-dedaeb6aadd7" />
+
 
 ### Build docker images
 `./build_docker.sh`
@@ -15,12 +18,12 @@ Start the container
 
 ### [Connect to Open WebUI](https://github.com/sstc-aiteam/open-webui-pipelines/tree/dev_openai_ada?tab=readme-ov-file#docker)
 
-### Parameters for  OpenAI Advanced Data Analysis Pipeline  
+### Parameters for OpenAI Advanced Data Analysis Pipeline  
 <img height="300" alt="image" src="https://github.com/user-attachments/assets/69da804b-f5fe-4216-9e2e-bbea99dbea9c" />
 
 - [Open WebUI Authentication Setup for API Key](https://docs.openwebui.com/getting-started/advanced-topics/monitoring/#authentication-setup-for-api-key-)
 
-See below for the offical [open-webui pipelines](https://github.com/open-webui/pipelines)  
+See below for the offical documentataion, [open-webui pipelines](https://github.com/open-webui/pipelines)  
 
 ----
 <p align="center">
