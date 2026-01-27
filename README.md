@@ -9,13 +9,14 @@ Ask questions about your CSV files in natural language. This pipeline loads all 
 #### Extend analysis data source by uploading .csv or .docx files
 <img width="570" height="368" alt="ada_pipelines_ks" src="https://github.com/user-attachments/assets/d5919da9-1095-4429-916b-dedaeb6aadd7" />
 
-
 ### Build docker images
 `./build_docker.sh`
 
 ### Start with docker
+check [Docker Hub](https://hub.docker.com/r/sstcaiteam/open-webui-pipelines/tags) for quick deployment
+
 Pull the image  
-`docker pull sstcaiteam/open-webui-pipelines:${VERSION}`
+`docker pull sstcaiteam/open-webui-pipelines:2.0.0`
  
 Start the container  
 `docker run -d -p 9099:9099 --add-host=host.docker.internal:host-gateway -v pipelines:/app/pipelines --name pipelines sstcaiteam/open-webui-pipelines:2.0.0`
