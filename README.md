@@ -1,5 +1,5 @@
 
-## [**PandasAI CSV Query Pipeline**](/pipelines/pandas_ai_csv_pipeline.py)
+## [**OpenAI Advanced Data Analysis CSV Query Pipeline**](/pipelines/pandas_ai_csv_pipeline.py)
 Ask questions about your CSV files in natural language. This pipeline loads all CSVs from a directory and uses OpenAI LLM with Advanced Data Analysis tool (Code Interpreter) to answer your queries.
 
 ### Overview
