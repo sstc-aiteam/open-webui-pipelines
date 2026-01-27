@@ -4,7 +4,7 @@ Ask questions about your CSV files in natural language. This pipeline loads all 
 
 ### Workflow Overview
 #### User query with uploaded CSV tables 
-<img width="544" height="374" alt="ada_pipelines_query" src="https://github.com/user-attachments/assets/8d334c1c-d234-4ed4-8bbd-4351ae45b69c" />
+<img width="544" height="374" alt="ada_pipelines_query" src="https://github.com/user-attachments/assets/a2dcb93c-9b7c-4062-a4a6-802ad20a1c3f" />
 
 #### Extend analysis data source by uploading .csv or .docx files
 <img width="570" height="368" alt="ada_pipelines_ks" src="https://github.com/user-attachments/assets/d5919da9-1095-4429-916b-dedaeb6aadd7" />
