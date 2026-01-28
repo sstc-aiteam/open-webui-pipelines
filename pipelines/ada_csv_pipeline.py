@@ -94,7 +94,7 @@ class Pipeline:
 💡 若未指定模式，完成初步擷取後請主動詢問：
 「是否要改採 ‘先摘要再擷取關鍵詞’ 的模式，以獲得更概括的主題關鍵詞？」
 
-🧩 Step 2｜輸出 JSON 格式結構化內容
+🧩 Step 2｜輸出標準 JSON 格式結構化內容，不添加額外說明或建議
 
 請一律輸出下列表格所示的四個主要區塊，並確保內容可支撐後續分類任務。
 
@@ -116,6 +116,7 @@ class Pipeline:
         )
         self.client = None
         self.file_ids = {}  # Map file_path to file_id
+        self.retry_attempts = 3
 
     async def setup_assistant(self):
         if not self.valves.OPENAI_API_KEY:
@@ -183,7 +184,7 @@ class Pipeline:
                                             if keywords:
                                                 df.loc[row_masks, "核心關鍵詞組"] = "、".join(keywords) if isinstance(keywords, list) else str(keywords)
                         except Exception as e:
-                            logger.error(f"Error processing {json_file}: {e}")
+                            logger.error(f"Error processing JSON file {json_file}: {e}")
 
             df.to_csv(all_csv_path, index=False)
 
@@ -256,7 +257,7 @@ class Pipeline:
         return False
 
 
-    async def process_docx_file(self, file_id: str, file_name: str, url_path: str) -> bool:
+    async def process_doc_file(self, file_id: str, file_name: str, url_path: str) -> bool:
         doc_dir_path = os.path.join(
             os.path.dirname(os.path.abspath(__file__)), self.valves.DOC_DIR
         )
@@ -295,16 +296,36 @@ class Pipeline:
                     full_text.append(para.text)
                 text_content = "\n".join(full_text)
 
-                logger.info(f"Extracted keywords from DOCX {save_name} via OpenAI API ...")
-                completion = await self.client.chat.completions.create(
-                    model=self.valves.OPENAI_MODEL,
-                    messages=[
-                        {"role": "system", "content": self.valves.SYSTEM_PROMPT_KEYWORD},
-                        {"role": "user", "content": text_content[:20000]}
-                    ],
-                    response_format={"type": "json_object"}
-                )
-                keywords_json = completion.choices[0].message.content
+                logger.info(f"Extracted keywords from file {save_name} via OpenAI API ...")
+                keywords_json = "{}"
+                for attempt in range(self.retry_attempts):
+                    try:
+                        # completion = await self.client.chat.completions.create(
+                        #     model=self.valves.OPENAI_MODEL,
+                        #     messages=[
+                        #         {"role": "system", "content": self.valves.SYSTEM_PROMPT_KEYWORD},
+                        #         {"role": "user", "content": text_content[:20000]}
+                        #     ],
+                        #     response_format={"type": "json_object"},
+                        #     timeout=60
+                        # )
+                        # keywords_json = completion.choices[0].message.content
+                        response = await self.client.responses.create(
+                            model=self.valves.OPENAI_MODEL,
+                            instructions=self.valves.SYSTEM_PROMPT_KEYWORD,
+                            input=[{"role": "user", 
+                                    "content": text_content[:20000]}],
+                            timeout=60
+                        )
+                        keywords_json = response.output_text
+                        logger.info(f"Received keywords JSON for {save_name}: {keywords_json[:100]}")
+
+                        break
+                    except Exception as e:
+                        logger.warning(f"Attempt {attempt+1}/{self.retry_attempts} failed for {save_name}: {e}")
+                        if attempt == self.retry_attempts - 1:
+                            raise e
+                        await asyncio.sleep(2)
                 
                 with open(json_path, "w") as f:
                     f.write(keywords_json)
@@ -312,7 +333,7 @@ class Pipeline:
                 return True
 
         except Exception as e:
-            logger.error(f"Error processing docx file: {e}")
+            logger.error(f"Error processing doc file: {e}")
         
         return False
 
@@ -334,7 +355,7 @@ class Pipeline:
                         files_added = True
 
                 elif url_path and name.endswith(".docx"):
-                    if await self.process_docx_file(id, name, url_path):
+                    if await self.process_doc_file(id, name, url_path):
                         files_added = True
             
             if files_added:
