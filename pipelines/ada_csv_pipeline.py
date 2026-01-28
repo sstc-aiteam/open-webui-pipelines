@@ -153,7 +153,7 @@ class Pipeline:
                 except Exception as e:
                     logger.error(f"Error reading {file_path}: {e}")
         
-        # Enrich all.csv with keywords from docs json files
+        # Enrich all.csv with keywords from docs/*.json files
         if dfs:
             df = pd.concat(dfs, ignore_index=True)
 
@@ -162,17 +162,20 @@ class Pipeline:
                 os.path.dirname(os.path.abspath(__file__)), self.valves.DOC_DIR
             )
             if os.path.exists(doc_dir_path):
-                json_files = glob.glob(os.path.join(doc_dir_path, "*.docx.json"))
+                json_files = glob.glob(os.path.join(doc_dir_path, "*.json"))
+                json_files.sort(key=os.path.getctime)
                 if json_files:
                     if "核心關鍵詞組" not in df.columns:
                         df["核心關鍵詞組"] = ""
                     
                     for json_file in json_files:
                         try:
-                            # Filename format: $GUID_$編號.docx.json
+                            # Filename format: $GUID_$編號.docx/pdf.json
+                            # e.g., 123e4567-e89b-12d3-a456-426614174000_42.docx.json
                             filename = os.path.basename(json_file)
-                            if filename.endswith(".docx.json"):
-                                num_str = filename[:-10].split("_")[-1]
+                            if filename.endswith(".json"):
+                                num_str = filename[-20:].split("_")[-1].split(".")[0]
+                                logger.info(f"Extracted keywords from JSON file {filename} for 編號 {num_str} 計畫")
                                 if num_str.isdigit():
                                     num = int(num_str)
                                     if "編號" in df.columns:
@@ -268,12 +271,14 @@ class Pipeline:
             headers = {}
             if self.valves.OPEN_WebUI_API_KEY:
                 headers["Authorization"] = f"Bearer {self.valves.OPEN_WebUI_API_KEY}"
+            # OpenWebUI API for the uploaded file raw content
             url = f"{self.valves.OPEN_WebUI_Host}{url_path}/content"
             response = requests.get(url, headers=headers)
             response.raise_for_status()
 
             content = response.content
-            is_duplicate, save_name = self.check_duplicate_file(doc_dir_path, content, "*.docx")
+            ptn_ext_fname = "*.docx" if file_name.endswith(".docx") else "*.pdf"
+            is_duplicate, save_name = self.check_duplicate_file(doc_dir_path, content, ptn_ext_fname)
             if not is_duplicate:
                 save_name = "_".join([file_id, os.path.basename(file_name)])
                 file_path = os.path.join(doc_dir_path, save_name)
@@ -289,27 +294,31 @@ class Pipeline:
                 if os.path.exists(json_path):
                     logger.info(f"Keywords JSON already exists at {json_path}, skipping generation.")
                     return False
+                
+                # OpenWebUI API for the uploaded file metadata and processed content in JSON
+                # The response JSON structure:
+                # {
+                #   "id": "", "user_id": "", "hash": "", "filename": "", "path": "",
+                #   "data": {
+                #     "status": "",
+                #     "content": ""
+                #   },
+                #   "meta": { "name": "", "content_type": "", "size": "", "data": {}, "collection_name": "" },
+                #   "access_control": "", "created_at": "", "updated_at": ""
+                # }
+                url = f"{self.valves.OPEN_WebUI_Host}{url_path}"
+                response = requests.get(url, headers=headers)
+                response.raise_for_status()
 
-                doc = Document(io.BytesIO(content))
-                full_text = []
-                for para in doc.paragraphs:
-                    full_text.append(para.text)
-                text_content = "\n".join(full_text)
+                raw_json = json.loads(response.content)
+                text_content = raw_json.get("data", {}).get("content", "")
+                snippet = text_content[:50].replace('\n', '\\n')
+                logger.info(f"Extracting text content from {save_name}: {snippet}")
 
-                logger.info(f"Extracted keywords from file {save_name} via OpenAI API ...")
+                logger.info(f"Extracting keywords for file {save_name} via OpenAI API ...")
                 keywords_json = "{}"
                 for attempt in range(self.retry_attempts):
                     try:
-                        # completion = await self.client.chat.completions.create(
-                        #     model=self.valves.OPENAI_MODEL,
-                        #     messages=[
-                        #         {"role": "system", "content": self.valves.SYSTEM_PROMPT_KEYWORD},
-                        #         {"role": "user", "content": text_content[:20000]}
-                        #     ],
-                        #     response_format={"type": "json_object"},
-                        #     timeout=60
-                        # )
-                        # keywords_json = completion.choices[0].message.content
                         response = await self.client.responses.create(
                             model=self.valves.OPENAI_MODEL,
                             instructions=self.valves.SYSTEM_PROMPT_KEYWORD,
@@ -318,7 +327,7 @@ class Pipeline:
                             timeout=60
                         )
                         keywords_json = response.output_text
-                        logger.info(f"Received keywords JSON for {save_name}: {keywords_json[:100]}")
+                        logger.info(f"Received keywords JSON of {save_name}: {keywords_json[:100]}")
 
                         break
                     except Exception as e:
@@ -354,7 +363,7 @@ class Pipeline:
                     if await self.process_csv_file(id, name, url_path):
                         files_added = True
 
-                elif url_path and name.endswith(".docx"):
+                elif url_path and name.endswith((".docx", ".pdf")):
                     if await self.process_doc_file(id, name, url_path):
                         files_added = True
             
