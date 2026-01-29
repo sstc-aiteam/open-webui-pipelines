@@ -167,6 +167,8 @@ class Pipeline:
                 if json_files:
                     if "核心關鍵詞組" not in df.columns:
                         df["核心關鍵詞組"] = ""
+                    else:
+                        df["核心關鍵詞組"] = df["核心關鍵詞組"].astype("object")
                     
                     for json_file in json_files:
                         try:
@@ -185,7 +187,11 @@ class Pipeline:
                                                 data = json.load(f)
                                             keywords = data.get("核心關鍵詞組")
                                             if keywords:
-                                                df.loc[row_masks, "核心關鍵詞組"] = "、".join(keywords) if isinstance(keywords, list) else str(keywords)
+                                                kw_str = "、".join(keywords) if isinstance(keywords, list) else str(keywords)
+                                                logger.info(f"get keywords: {kw_str[:50]} for 編號 {num}")
+
+                                                df.loc[row_masks, "核心關鍵詞組"] = kw_str
+                                                logger.info(f"Updated dataframe for 編號 {num} with keywords {kw_str[:50]}")
                         except Exception as e:
                             logger.error(f"Error processing JSON file {json_file}: {e}")
 
