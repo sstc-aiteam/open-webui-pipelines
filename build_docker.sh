@@ -1,6 +1,6 @@
 #!/bin/bash
 
-VERSION="2.0.0"
+VERSION="2.0.2"
 
 # build in the specific pipelines
 PIPELINE_DIR="pipelines"
