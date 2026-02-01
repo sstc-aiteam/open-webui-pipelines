@@ -67,46 +67,192 @@ class Pipeline:
         )
         SYSTEM_PROMPT_KEYWORD: str = Field(
             default="""
-你是一位專精於智慧運輸系統（Intelligent Transportation Systems, ITS）領域的專業分析師，擅長從政策報告、技術文件與研究資料中抽取能支撐分類工作的關鍵資訊。
-你的任務是：
-針對使用者提供的 ITS 文件內容或知識庫文本，輸出可用於文件自動分類與檢索索引建立的結構化分析結果。
+🧠 ITS 文件搜尋導向分析模型
 
-【語言與風格規範】
+Prompt（Final Version｜Auto Question-Family + Debug Quality Scoring + 500 字搜尋摘要）
 
-語言： 必須使用繁體中文，禁止出現簡體字或大陸用語。
+🎯 角色設定
+ 
+你是一位專精於**智慧運輸系統（Intelligent Transportation Systems, ITS）**的專業分析師，
 
-風格： 採正式、嚴謹、邏輯清晰的分析報告口吻。
+擅長從政府計畫、技術報告與研究文件中，抽取可用於：
+ 
+年度計畫 Excel（計畫名稱／摘要／關鍵詞）
+ 
+計畫助理自然語言搜尋
+ 
+文件自動分群與比對（RAG / Knowledge Base）
+ 
+之結構化搜尋導向資訊。
+ 
+📝 語言與風格規範（必守）
+ 
+語言：一律使用繁體中文（禁止簡體字與中國大陸用語）
+ 
+風格：正式、嚴謹，偏政策與行政分析語體
+ 
+取詞原則：
+ 
+關鍵詞須具備「語意指向性」與「搜尋可命中性」
+ 
+避免僅對工程師有意義之專業代碼、內部縮寫
+ 
+優先使用「人會怎麼問」的語彙，而非完整技術句
+ 
+⚙️ 任務流程（請依序執行）
 
-取詞準則： 關鍵詞應具備「語意指向性」與「分類可判斷性」，避免過於籠統或修辭性詞彙。
+🧠 Step 0｜輸入模式判定（內部執行）
+ 
+若使用者輸入文字以 (Debug) 開頭，請啟用 Debug 模式
+ 
+Debug 模式 = 一般分析輸出 +「自動品質評分與診斷」
+ 
+非 Debug 模式 = 僅輸出分析結果
+ 
+⚠️ (Debug) 僅為控制標記，不屬於文件內容，分析時請忽略該字串
+ 
+🧠 Step 1｜ITS 計畫型態自動判定（內部，不得輸出）
+ 
+請判定文件主要屬於下列哪一類（擇一為主）：
+ 
+工程／系統建置型
+ 
+資料／平台／整合型
+ 
+政策／制度／治理型
+ 
+研究／試驗／評估型
+ 
+📌 此判定僅用於後續問句族選擇與關鍵詞檢核，不得出現在最終輸出。
+ 
+🧠 Step 2｜自動選用對應問句族（內部檢核，不得輸出）
+ 
+請依 Step 1 判定結果，僅選用對應的一組問句族，
 
-⚙️ 【任務流程與輸出邏輯】
-🧠 Step 1｜模式判定與執行
+作為關鍵詞「搜尋可命中性」之內部檢核依據。
+ 
+🧠 問句族定義（內部檢核使用，不得輸出）
 
-1️⃣ 預設模式（不摘要）
-　直接根據全文內容進行主題分類與關鍵詞擷取。
-　此模式適合文件結構完整、主題集中者。
+問句族 A｜工程／系統建置型 ITS 計畫
+ 
+有沒有做過「＿＿＿」的 ITS 建置計畫？
+ 
+哪個計畫是在「＿＿＿路口／路段」導入相關系統？
+ 
+之前有沒有用「＿＿＿」來改善交通運作？
+ 
+有沒有針對「＿＿＿問題」建置實體或資訊系統？
+ 
+問句族 B｜資料／平台／整合型 ITS 計畫
+ 
+有沒有做過「＿＿＿資料」的整合或平台建置？
+ 
+哪個計畫有建立「＿＿＿資訊平台」？
+ 
+之前有沒有把「＿＿＿資料」整合起來使用？
+ 
+有沒有用資料或系統來支援「＿＿＿決策或管理」？
+ 
+問句族 C｜政策／制度／治理型 ITS 計畫
+ 
+有沒有做過「＿＿＿」相關的交通政策或推動計畫？
+ 
+哪個計畫是在處理「＿＿＿治理或管理問題」？
+ 
+之前有沒有針對「＿＿＿議題」提出制度或配套？
+ 
+有沒有規劃以「＿＿＿」為目標的政策方案？
+ 
+問句族 D｜研究／試驗／評估型 ITS 計畫
+ 
+有沒有做過「＿＿＿」的研究或試驗計畫？
+ 
+哪個計畫是在評估「＿＿＿作法」是否可行？
+ 
+之前有沒有針對「＿＿＿情境」進行測試或分析？
+ 
+有沒有試辦「＿＿＿技術或方法」的相關研究？
+ 
+📌 問句僅供內部檢核使用，不得以任何形式出現在最終輸出。
+ 
+🧩 Step 3｜產出結構化搜尋導向結果，以標準JSON格式輸出，不添加其他符號、說明或建議（主要輸出）
+ 
+請一律依下列順序輸出五個區塊，不得增減或調換順序：
+ 
+1️⃣【搜尋導向摘要】
+ 
+請依全文解析結果撰寫一段約 500 字摘要，用途為：
+ 
+協助計畫助理快速判斷是否為欲查找之 ITS 計畫
+ 
+支援模糊搜尋、語意搜尋與跨年度比對
+ 
+作為年度計畫 Excel 或知識庫顯示用摘要
+ 
+撰寫原則：
+ 
+採行政與政策文件語體
+ 
+說明：計畫背景、問題情境、改善目標、整體作法方向、應用場域
+ 
+著重「為何要做／解決什麼問題／在哪裡做」
+ 
+不得僅為條列或原文拼接，須為可閱讀完整段落
+ 
+📌 摘要僅作為搜尋與理解輔助，不限制後續關鍵詞擷取來源。
+ 
+2️⃣【主題分類】
+ 
+請列出 2–4 組 ITS 常見分類標籤
+ 
+需可支援跨年度、跨縣市、跨計畫類型分群比對
+ 
+3️⃣【文件屬性】
+ 
+說明文件性質（如：結案報告、技術文件、政策規劃、研究成果）
+ 
+用以判斷資料來源與使用情境
+ 
+4️⃣【核心關鍵詞組】
+ 
+請依**全文解析結果（非僅摘要）**抽取 5–10 組多詞名詞組，並遵守：
+ 
+每組不超過 12 個字
+ 
+一組僅表達 一個可被問到的概念
+ 
+至少 30% 為問題／情境導向關鍵詞
+ 
+專有系統或產品名稱不得作為主要關鍵詞
+ 
+所有關鍵詞須可通過 Step 2 所選問句族之內部檢核
+ 
+5️⃣【搜尋輔助詞（Query Expansion）】
+ 
+請針對每一組核心關鍵詞補充：
+ 
+行政或實務常用寫法
+ 
+口語化或不完整但常見的搜尋片語
+ 
+英文術語或常見縮寫（僅作補充）
+ 
+🚫【輸出潔淨規則（必守）】
+ 
+最終輸出中：
+ 
+❌ 不得包含任何分析流程、規則、問句或測試說明
+ 
+❌ 不得出現任何自我描述或模型說明文字
+ 
+✅ 僅輸出「分析結果本身」
 
-2️⃣ 摘要模式（使用者指定時採用）
-　若使用者明確指令（如「請先摘要再抽取」或「採摘要模式」），則：
-　- 先生成一份約500字 的專業摘要。
-　- 再根據摘要進行關鍵詞擷取與分類分析。
-
-💡 若未指定模式，完成初步擷取後請主動詢問：
-「是否要改採 ‘先摘要再擷取關鍵詞’ 的模式，以獲得更概括的主題關鍵詞？」
-
-🧩 Step 2｜輸出標準 JSON 格式結構化內容，不添加額外說明或建議
-
-請一律輸出下列表格所示的四個主要區塊，並確保內容可支撐後續分類任務。
-
-區塊編號	區塊名稱	輸出內容要求	範例參考
-1️⃣	【主題分類】	以 2–4 組明確主題標籤表示文件核心範疇；建議使用既有 ITS 分類體系。	智慧號誌、車聯網(V2X)、MaaS、自駕車、交通管理政策、國際合作
-2️⃣	【文件屬性】	指出文件性質，用以判斷資料來源與用途。	政策報告、技術規劃、試驗案例、研究成果、標準規範
-3️⃣	【核心關鍵詞組】	抽取 5–10 個具代表性的多詞名詞組，並涵蓋「技術項目」、「政策面向」與「應用場域」三類資訊。	動態號誌控制系統、車流偵測設備、緊急車輛優先權、路側單元(RSU)、資料交換標準
-4️⃣	【搜尋輔助詞】	針對關鍵詞組補充同義詞、縮寫、英文術語或常用變體，方便跨文件檢索。	動態號誌：智慧號誌控制、Adaptive Signal Control；EVP：緊急車輛優先通行、Emergency Vehicle Priority
-
-🔍 提示： 關鍵詞組的選取應兼顧「主題層級」（政策、技術、服務）與「語意層級」（系統、設備、應用、成效），以利後續文件自動分群。
             """,
-            description="System prompt for keyword extraction from document files."
+            description="System prompt for summary and keywords extraction from document files, i.e., .docx, .pdf"
+        )
+        SYSTEM_PROMPT_ADA: str = Field(
+            default="You are a helpful assistant proficient in data analysis. You have access to CSV files. Use the code_interpreter tool to analyze the data and answer user questions.",
+            description="System prompt to analyze budget tables (.csv) with OpenAI Advanced Data Analysis (Code Interpreter)."
         )
 
     def __init__(self):
@@ -153,11 +299,11 @@ class Pipeline:
                 except Exception as e:
                     logger.error(f"Error reading {file_path}: {e}")
         
-        # Enrich all.csv with keywords from docs/*.json files
+        # Enrich all.csv with meta content from docs/*.json files
         if dfs:
             df = pd.concat(dfs, ignore_index=True)
 
-            # Load keywords from docx json files and fill to the corresponding cell in dataframe
+            # Load meta content from docx json files and fill to the corresponding cell in dataframe
             doc_dir_path = os.path.join(
                 os.path.dirname(os.path.abspath(__file__)), self.valves.DOC_DIR
             )
@@ -170,6 +316,11 @@ class Pipeline:
                     else:
                         df["核心關鍵詞組"] = df["核心關鍵詞組"].astype("object")
                     
+                    if "搜尋導向摘要" not in df.columns:
+                        df["搜尋導向摘要"] = ""
+                    else:
+                        df["搜尋導向摘要"] = df["搜尋導向摘要"].astype("object")
+                    
                     for json_file in json_files:
                         try:
                             # Filename format: $GUID_$編號.docx/pdf.json
@@ -177,7 +328,7 @@ class Pipeline:
                             filename = os.path.basename(json_file)
                             if filename.endswith(".json"):
                                 num_str = filename[-20:].split("_")[-1].split(".")[0]
-                                logger.info(f"Extracted keywords from JSON file {filename} for 編號 {num_str} 計畫")
+                                logger.info(f"Extracted meta content from JSON file {filename} for 編號 {num_str} 計畫")
                                 if num_str.isdigit():
                                     num = int(num_str)
                                     if "編號" in df.columns:
@@ -185,13 +336,17 @@ class Pipeline:
                                         if row_masks.any():
                                             with open(json_file, "r", encoding="utf-8") as f:
                                                 data = json.load(f)
-                                            keywords = data.get("核心關鍵詞組")
+
+                                            keywords = data.get("核心關鍵詞組", "")
                                             if keywords:
                                                 kw_str = "、".join(keywords) if isinstance(keywords, list) else str(keywords)
-                                                logger.info(f"get keywords: {kw_str[:50]} for 編號 {num}")
-
                                                 df.loc[row_masks, "核心關鍵詞組"] = kw_str
                                                 logger.info(f"Updated dataframe for 編號 {num} with keywords {kw_str[:50]}")
+
+                                            summary = data.get("搜尋導向摘要", "")
+                                            if summary:
+                                                df.loc[row_masks, "搜尋導向摘要"] = str(summary)
+                                                logger.info(f"Updated dataframe for 編號 {num} with summary {summary[:50]}")
                         except Exception as e:
                             logger.error(f"Error processing JSON file {json_file}: {e}")
 
@@ -298,7 +453,7 @@ class Pipeline:
             if self.client:
                 json_path = os.path.join(doc_dir_path, f"{save_name}.json")
                 if os.path.exists(json_path):
-                    logger.info(f"Keywords JSON already exists at {json_path}, skipping generation.")
+                    logger.info(f"summary and keywords JSON already exists at {json_path}, skipping generation.")
                     return False
                 
                 # OpenWebUI API for the uploaded file metadata and processed content in JSON
@@ -321,8 +476,8 @@ class Pipeline:
                 snippet = text_content[:50].replace('\n', '\\n')
                 logger.info(f"Extracting text content from {save_name}: {snippet}")
 
-                logger.info(f"Extracting keywords for file {save_name} via OpenAI API ...")
-                keywords_json = "{}"
+                logger.info(f"Extracting summary and keywords for file {save_name} via OpenAI API ...")
+                meta_content_json = "{}"
                 for attempt in range(self.retry_attempts):
                     try:
                         response = await self.client.responses.create(
@@ -332,8 +487,8 @@ class Pipeline:
                                     "content": text_content[:20000]}],
                             timeout=60
                         )
-                        keywords_json = response.output_text
-                        logger.info(f"Received keywords JSON of {save_name}: {keywords_json[:100]}")
+                        meta_content_json = response.output_text
+                        logger.info(f"Received summary and keywords JSON of {save_name}: {meta_content_json[:100]}")
 
                         break
                     except Exception as e:
@@ -343,8 +498,8 @@ class Pipeline:
                         await asyncio.sleep(2)
                 
                 with open(json_path, "w") as f:
-                    f.write(keywords_json)
-                logger.info(f"Keywords saved to {json_path}")
+                    f.write(meta_content_json)
+                logger.info(f"summary and keywords saved to {json_path}")
                 return True
 
         except Exception as e:
@@ -413,7 +568,7 @@ class Pipeline:
                                 "file_ids": csv_file_ids
                             }
                         }],
-                        instructions="You are a helpful assistant proficient in data analysis. You have access to CSV files. Use the code_interpreter tool to analyze the data and answer user questions.",
+                        instructions=self.valves.SYSTEM_PROMPT_ADA,
                         input=msgs,
                     )
                     rs = response.output_text
