@@ -7,7 +7,8 @@ Ask questions about your CSV files in natural language. This pipeline loads all 
 <img width="544" height="374" alt="ada_pipelines_query" src="https://github.com/user-attachments/assets/a2dcb93c-9b7c-4062-a4a6-802ad20a1c3f" />
 
 #### Extend analysis data source by uploading .csv or .docx files
-<img width="570" height="368" alt="ada_pipelines_ks" src="https://github.com/user-attachments/assets/d5919da9-1095-4429-916b-dedaeb6aadd7" />
+<img width="570" height="383" alt="ada_pipelines_ks" src="https://github.com/user-attachments/assets/e5ff01ae-95d4-49cd-acd5-f46f1cd1ff41" />
+
 
 ### Build docker images
 `./build_docker.sh`
