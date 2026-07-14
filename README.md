@@ -17,10 +17,10 @@ Ask questions about your CSV files in natural language. This pipeline loads all 
 check [Docker Hub](https://hub.docker.com/r/sstcaiteam/open-webui-pipelines/tags) for quick deployment
 
 Pull the image  
-`docker pull sstcaiteam/open-webui-pipelines:2.0.0`
+`docker pull sstcaiteam/open-webui-pipelines:2.0.3`
  
 Start the container  
-`docker run -d -p 9099:9099 --add-host=host.docker.internal:host-gateway -v pipelines:/app/pipelines --name pipelines sstcaiteam/open-webui-pipelines:2.0.0`
+`docker run -d -p 9099:9099 --add-host=host.docker.internal:host-gateway -v pipelines:/app/pipelines --name pipelines sstcaiteam/open-webui-pipelines:2.0.3`
 
 ### [Connect to Open WebUI](https://github.com/sstc-aiteam/open-webui-pipelines/tree/dev_openai_ada?tab=readme-ov-file#docker)
 
