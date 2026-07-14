@@ -27,7 +27,7 @@ Start the container
 ### Parameters for OpenAI Advanced Data Analysis Pipeline  
 <img height="300" alt="image" src="https://github.com/user-attachments/assets/69da804b-f5fe-4216-9e2e-bbea99dbea9c" />
 
-- [Open WebUI Authentication Setup for API Key](https://docs.openwebui.com/getting-started/advanced-topics/monitoring/#authentication-setup-for-api-key-)
+- [Open WebUI Authentication Setup for API Key](https://docs.openwebui.com/features/authentication-access/api-keys/)
 
 See below for the offical documentataion, [open-webui pipelines](https://github.com/open-webui/pipelines)  
 
